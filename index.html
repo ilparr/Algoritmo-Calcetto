@@ -28,8 +28,8 @@
   <section id="v-classifica" class="vista on">
     <div class="barra">
       <label class="fid">Fiducia nei voti
-        <input type="range" id="fiducia" min="30" max="300" step="10" value="100">
-        <b id="fiducia-val">±100</b>
+        <input type="range" id="fiducia" min="3" max="30" step="1" value="10">
+        <b id="fiducia-val">±10</b>
       </label>
       <div class="azioni">
         <button id="esporta">Esporta voti</button>
@@ -37,12 +37,12 @@
         <button id="azzera" class="sec">Azzera voti</button>
       </div>
     </div>
-    <p class="nota">Scrivi il <b>voto</b> di partenza di ogni giocatore (1000 = medio, ±100 = differenza netta).
-      Chi resta vuoto parte da 1000. La <b>forza</b> è il voto corretto dalle partite; <b>Δ</b> è quanto le partite
+    <p class="nota">Scrivi l'<b>overall</b> di partenza di ogni giocatore, come su FIFA: <b>75 = medio</b>, 10 punti = differenza netta
+      (un 85 al posto di un 75 porta la sua squadra da ~31% a ~41% di vittoria). Chi resta vuoto parte da 75. L'<b>overall</b> è il voto corretto dalle partite; <b>Δ</b> è quanto le partite
       ti hanno smentito. Tocca un nome per vedere da dove viene.</p>
     <div class="tab-wrap">
       <table class="tab" id="tab-classifica">
-        <thead><tr><th>#</th><th class="sx">Giocatore</th><th>Voto</th><th>Forza</th><th>±</th><th>Δ</th><th>Pres.</th><th class="hide-s">V-P-S</th></tr></thead>
+        <thead><tr><th>#</th><th class="sx">Giocatore</th><th>Voto</th><th>Overall</th><th>±</th><th>Δ</th><th class="hide-s">Pres.</th><th class="hide-s">V-P-S</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -68,7 +68,7 @@
     <article class="testo">
       <h2>1. La forza di una squadra</h2>
       <p>Ogni giocatore ha una forza <i>θ</i>; la squadra vale la <b>somma</b> dei suoi cinque:
-        <code>S = θ₁ + θ₂ + θ₃ + θ₄ + θ₅</code>. In punti: <code>punti = 1000 + 100·θ</code>.</p>
+        <code>S = θ₁ + θ₂ + θ₃ + θ₄ + θ₅</code>. Come overall: <code>overall = 75 + 10·θ</code>.</p>
       <h2>2. La probabilità di un risultato</h2>
       <p>Con <code>d = (S<sub>mia</sub> − S<sub>loro</sub>) / 2</code>:</p>
       <p><code>P(vinco) = eᵈ / (eᵈ + e⁻ᵈ + ν)</code><br>
@@ -82,7 +82,7 @@
         σ è la <b>fiducia</b>: con σ piccolo serve una valanga di partite per smentire un voto.</p>
       <h2>4. ⭐ Perché conta con chi e contro chi giochi</h2>
       <p>Nel punto di massimo vale, esattamente:</p>
-      <p class="formula"><code>forza = voto + σ² · Σ<sub>partite</sub> ½ · (risultato − atteso)</code></p>
+      <p class="formula"><code>θ = θ<sub>voto</sub> + σ² · Σ<sub>partite</sub> ½ · (risultato − atteso)</code></p>
       <p><b>risultato</b> è +1 se la tua squadra vince, 0 se pareggia, −1 se perde. <b>atteso</b> è
         P(vinco) − P(perdo) calcolato <b>con i compagni e gli avversari di quella partita</b>. Quindi:</p>
       <ul>

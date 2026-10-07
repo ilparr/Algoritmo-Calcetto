@@ -2,16 +2,22 @@
 const DB_URL = "https://calcetti-1ebd7-default-rtdb.europe-west1.firebasedatabase.app/.json";
 const K_VOTI = "forzacalcetti.voti", K_FID = "forzacalcetti.fiducia";
 
-const st = { giocatori: {}, partite: [], voti: leggi(K_VOTI, {}), fiducia: leggi(K_FID, 100),
+const st = { giocatori: {}, partite: [], voti: leggi(K_VOTI, {}), fiducia: leggi(K_FID, 10),
              stima: null, scelti: new Set(), vista: "classifica", sel: null };
 
 function leggi(k, def) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } }
 function scrivi(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+// voti e fiducia salvati con la vecchia scala (1000 = medio, ±100): si convertono una volta
+if (Object.values(st.voti).some(v => v > 200)) {
+  for (const k in st.voti) st.voti[k] = Math.round(OVR_MEDIA + (st.voti[k] - 1000) / 10);
+  scrivi(K_VOTI, st.voti);
+}
+if (st.fiducia > 40) { st.fiducia = Math.round(st.fiducia / 10); scrivi(K_FID, st.fiducia); }
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const nome = id => st.giocatori[id]?.nome || id;
 const pct = x => Math.round(100 * x) + "%";
-const segno = x => (x > 0 ? "+" : x < 0 ? "−" : "") + Math.abs(Math.round(x));
+const segno = (x, dec = 0) => { const v = Math.abs(x).toFixed(dec); return (Number(v) === 0 ? "" : x > 0 ? "+" : "−") + v; };
 
 async function carica() {
   $("#stato").textContent = "Carico le partite…";
@@ -66,11 +72,11 @@ function disegnaClassifica() {
     return `<tr>
       <td class="muted">${i + 1}</td>
       <td class="nome" data-apri="${esc(g.id)}">${esc(nome(g.id))}</td>
-      <td><input type="number" step="10" placeholder="1000" data-id="${esc(g.id)}" value="${st.voti[g.id] ?? ""}"></td>
+      <td><input type="number" step="1" min="1" max="99" placeholder="75" data-id="${esc(g.id)}" value="${st.voti[g.id] ?? ""}"></td>
       <td class="forza">${Math.round(g.punti)}</td>
       <td class="muted">±${Math.round(g.sd)}</td>
       <td class="${delta > 0.5 ? "su" : delta < -0.5 ? "giu" : "muted"}">${segno(delta)}</td>
-      <td class="muted">${g.presenze}</td>
+      <td class="muted hide-s">${g.presenze}</td>
       <td class="muted hide-s">${vps(g.id)}</td></tr>`;
   }).join("");
   tb.querySelectorAll("input").forEach(inp => {
@@ -101,9 +107,9 @@ function disegnaGiocatore() {
   const pt = x => Math.round(x.punti);
   $("#spiegazione").innerHTML = `
     <div class="riassunto">
-      <div class="eq">${esc(nome(g.id))}: voto ${Math.round(g.partenza)} ${segno(somma) ? (somma >= 0 ? "+ " : "− ") + Math.abs(Math.round(somma)) : ""}
+      <div class="eq">${esc(nome(g.id))}: voto ${Math.round(g.partenza)} ${(somma >= 0 ? "+ " : "− ") + Math.abs(somma).toFixed(1)}
         dalle partite = <span class="forza">${Math.round(g.punti)}</span> <span class="muted">± ${Math.round(g.sd)}</span></div>
-      <div class="nota">Ogni partita sposta di <b>(risultato − atteso) × ${Math.round(50 * st.stima.sigma * st.stima.sigma)}</b> punti:
+      <div class="nota">Ogni partita sposta di <b>(risultato − atteso) × ${(OVR_SCALA / 2 * st.stima.sigma * st.stima.sigma).toFixed(1)}</b> punti di overall:
         risultato +1 vinta, 0 pari, −1 persa; atteso = P(vittoria) − P(sconfitta) con quei compagni e quegli avversari.
         Le forze di compagni e avversari sono quelle finali, che dipendono anche dalle partite giocate senza ${esc(nome(g.id))}.</div>
     </div>
@@ -114,10 +120,10 @@ function disegnaGiocatore() {
           <span class="muted">atteso ${r.atteso >= 0 ? "+" : "−"}${Math.abs(r.atteso).toFixed(2)} · risultato ${r.esito > 0 ? "+1" : r.esito < 0 ? "−1" : "0"}</span></div>
         <div class="righe">Compagni: ${r.compagni.map(c => `<b>${esc(nome(c.id))}</b> ${pt(c)}`).join(", ")}<br>
           Avversari: ${r.avversari.map(c => `<b>${esc(nome(c.id))}</b> ${pt(c)}`).join(", ")}<br>
-          Gli altri nove gli davano ${r.vantaggioAltri >= 0 ? "un vantaggio" : "uno svantaggio"} di <b>${Math.abs(Math.round(r.vantaggioAltri))}</b> punti ·
+          Gli altri nove gli davano ${r.vantaggioAltri >= 0 ? "un vantaggio" : "uno svantaggio"} di <b>${Math.abs(r.vantaggioAltri).toFixed(0)}</b> punti di overall ·
           prima della partita: vittoria ${pct(r.pVinta)}, pari ${pct(r.pPari)}, sconfitta ${pct(r.pPersa)}
           <div class="prob"><span style="width:${100 * r.pVinta}%"></span><span style="width:${100 * r.pPari}%"></span><span style="width:${100 * r.pPersa}%"></span></div></div>
-        <div class="delta ${r.punti > 0.5 ? "su" : r.punti < -0.5 ? "giu" : "muted"}">${segno(r.punti)}<small>punti</small></div>
+        <div class="delta ${r.punti > 0.5 ? "su" : r.punti < -0.5 ? "giu" : "muted"}">${segno(r.punti, 1)}<small>overall</small></div>
       </div>`).join("")}`;
 }
 
@@ -133,15 +139,15 @@ function disegnaSquadre() {
   });
   $("#conta").textContent = `${st.scelti.size} / 10`;
   if (st.scelti.size !== 10) { $("#divisioni").innerHTML = ""; return; }
-  const forza = id => Math.round(1000 + 100 * (st.stima.theta[id] ?? 0));
+  const forza = id => Math.round(overall(st.stima.theta[id] ?? 0));
   const lista = s => s.map(id => forza(id)).reduce((a, b) => a + b, 0);
   $("#divisioni").innerHTML = squadre(st.stima, [...st.scelti]).slice(0, 5).map((d, i) => `
     <div class="divisione">
       <div class="nota">Proposta ${i + 1} · chiari ${pct(d.p.chiari)} · pari ${pct(d.p.pareggio)} · scuri ${pct(d.p.scuri)}</div>
       <div class="prob"><span style="width:${100 * d.p.chiari}%"></span><span style="width:${100 * d.p.pareggio}%"></span><span style="width:${100 * d.p.scuri}%"></span></div>
       <div class="squadre" style="margin-top:8px">
-        <div><h3>Chiari · ${lista(d.a) - 5000 >= 0 ? "+" : ""}${lista(d.a) - 5000}</h3>${d.a.map(id => `${esc(nome(id))} <span class="muted">${forza(id)}</span>`).join("<br>")}</div>
-        <div><h3>Scuri · ${lista(d.b) - 5000 >= 0 ? "+" : ""}${lista(d.b) - 5000}</h3>${d.b.map(id => `${esc(nome(id))} <span class="muted">${forza(id)}</span>`).join("<br>")}</div>
+        <div><h3>Chiari · media ${(lista(d.a) / 5).toFixed(1)}</h3>${d.a.map(id => `${esc(nome(id))} <span class="muted">${forza(id)}</span>`).join("<br>")}</div>
+        <div><h3>Scuri · media ${(lista(d.b) / 5).toFixed(1)}</h3>${d.b.map(id => `${esc(nome(id))} <span class="muted">${forza(id)}</span>`).join("<br>")}</div>
       </div></div>`).join("");
 }
 

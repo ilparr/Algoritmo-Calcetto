@@ -25,15 +25,18 @@
 // `spiega()` restituisce proprio questi addendi.
 
 const BT_ITER = 6000;
+// SCALA «OVERALL» stile FIFA: 75 = giocatore medio, 10 punti = 1 di forza θ
+const OVR_MEDIA = 75, OVR_SCALA = 10;
+const overall = theta => OVR_MEDIA + OVR_SCALA * theta;
 
 function stimaForza(partite, giocatoriIds, opzioni = {}) {
-  const sigma = (opzioni.fiducia ?? 100) / 100;
+  const sigma = (opzioni.fiducia ?? 10) / OVR_SCALA;
   const base = opzioni.base || {};
   const ids = [...new Set([...giocatoriIds,
     ...partite.flatMap(m => [...(m.chiari || []), ...(m.scuri || [])])])];
   const idx = Object.fromEntries(ids.map((id, k) => [id, k]));
   const n = ids.length;                       // parametri: θ_0..θ_{n-1}, poi η = log ν
-  const mu = ids.map(id => base[id] != null && base[id] !== '' ? (Number(base[id]) - 1000) / 100 : 0);
+  const mu = ids.map(id => base[id] != null && base[id] !== '' ? (Number(base[id]) - OVR_MEDIA) / OVR_SCALA : 0);
   const gare = partite
     .filter(m => (m.chiari || []).length && (m.scuri || []).length)
     .map(m => ({ a: m.chiari.map(id => idx[id]), b: m.scuri.map(id => idx[id]),
@@ -89,9 +92,9 @@ function stimaForza(partite, giocatoriIds, opzioni = {}) {
   const nu = Math.exp(x[n]);
   const giocatori = ids.map((id, k) => ({
     id, forza: x[k], presenze: presenze[id],
-    partenza: 1000 + 100 * mu[k],
-    punti: 1000 + 100 * x[k],
-    sd: 100 * Math.sqrt(Math.max(cov[k][k], 0)),
+    partenza: overall(mu[k]),
+    punti: overall(x[k]),
+    sd: OVR_SCALA * Math.sqrt(Math.max(cov[k][k], 0)),
   })).sort((p, q) => q.forza - p.forza);
   return {
     giocatori, nu, sigma, pareggio: nu / (2 + nu),
@@ -111,7 +114,7 @@ function probabilita(stima, chiari, scuri) {
 // ⭐ da dove viene la forza di un giocatore: una riga per partita, e la somma delle righe più il
 // punteggio di partenza È il punteggio finale (a meno di arrotondamenti)
 function spiega(stima, partite, id) {
-  const pt = x => 1000 + 100 * (stima.theta[x] ?? 0);
+  const pt = x => overall(stima.theta[x] ?? 0);
   return partite
     .filter(m => (m.chiari || []).includes(id) || (m.scuri || []).includes(id))
     .map(m => {
@@ -126,11 +129,11 @@ function spiega(stima, partite, id) {
         compagni: mia.filter(x => x !== id).map(x => ({ id: x, punti: pt(x) })),
         avversari: loro.map(x => ({ id: x, punti: pt(x) })),
         // forza delle due squadre SENZA di lui da una parte: cosa portavano gli altri
-        vantaggioAltri: (mia.filter(x => x !== id).reduce((s, x) => s + pt(x) - 1000, 0)
-                        - loro.reduce((s, x) => s + pt(x) - 1000, 0)),
+        vantaggioAltri: (mia.filter(x => x !== id).reduce((s, x) => s + pt(x) - OVR_MEDIA, 0)
+                        - loro.reduce((s, x) => s + pt(x) - OVR_MEDIA, 0)),
         pVinta: p.chiari, pPari: p.pareggio, pPersa: p.scuri,
         atteso, sorpresa,
-        punti: 100 * stima.sigma * stima.sigma * sorpresa / 2,
+        punti: OVR_SCALA * stima.sigma * stima.sigma * sorpresa / 2,
       };
     })
     .sort((a, b) => (a.id < b.id ? -1 : 1));
@@ -165,4 +168,4 @@ function inversa(A) {
   return M.map(r => r.slice(n));
 }
 
-if (typeof module !== "undefined") module.exports = { stimaForza, probabilita, spiega, squadre };
+if (typeof module !== "undefined") module.exports = { stimaForza, probabilita, spiega, squadre, overall, OVR_MEDIA, OVR_SCALA };
