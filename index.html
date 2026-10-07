@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forza Calcetti</title>
+<meta name="description" content="Forza dei giocatori di calcetto stimata con Bradley-Terry, a partire dai voti di base.">
+<meta name="theme-color" content="#0E1B14">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">Forza <span>Calcetti</span></div>
+  <nav class="tabs" id="tabs">
+    <button data-v="classifica" class="on">Classifica</button>
+    <button data-v="giocatore">Giocatore</button>
+    <button data-v="squadre">Squadre</button>
+    <button data-v="formula">Come funziona</button>
+  </nav>
+</header>
+
+<main>
+  <div id="stato" class="stato">Carico le partite…</div>
+
+  <!-- CLASSIFICA -->
+  <section id="v-classifica" class="vista on">
+    <div class="barra">
+      <label class="fid">Fiducia nei voti
+        <input type="range" id="fiducia" min="30" max="300" step="10" value="100">
+        <b id="fiducia-val">±100</b>
+      </label>
+      <div class="azioni">
+        <button id="esporta">Esporta voti</button>
+        <label class="btn">Importa voti<input type="file" id="importa" accept="application/json" hidden></label>
+        <button id="azzera" class="sec">Azzera voti</button>
+      </div>
+    </div>
+    <p class="nota">Scrivi il <b>voto</b> di partenza di ogni giocatore (1000 = medio, ±100 = differenza netta).
+      Chi resta vuoto parte da 1000. La <b>forza</b> è il voto corretto dalle partite; <b>Δ</b> è quanto le partite
+      ti hanno smentito. Tocca un nome per vedere da dove viene.</p>
+    <div class="tab-wrap">
+      <table class="tab" id="tab-classifica">
+        <thead><tr><th>#</th><th class="sx">Giocatore</th><th>Voto</th><th>Forza</th><th>±</th><th>Δ</th><th>Pres.</th><th class="hide-s">V-P-S</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="nota" id="nota-pareggio"></p>
+  </section>
+
+  <!-- GIOCATORE -->
+  <section id="v-giocatore" class="vista">
+    <div class="barra"><select id="sel-giocatore"></select></div>
+    <div id="spiegazione"></div>
+  </section>
+
+  <!-- SQUADRE -->
+  <section id="v-squadre" class="vista">
+    <p class="nota">Scegli i <b>10</b> che giocano: ti propongo le divisioni con le probabilità più vicine al 50/50.</p>
+    <div id="scelta" class="scelta"></div>
+    <div class="barra"><span id="conta">0 / 10</span><button id="pulisci" class="sec">Togli tutti</button></div>
+    <div id="divisioni"></div>
+  </section>
+
+  <!-- FORMULA -->
+  <section id="v-formula" class="vista">
+    <article class="testo">
+      <h2>1. La forza di una squadra</h2>
+      <p>Ogni giocatore ha una forza <i>θ</i>; la squadra vale la <b>somma</b> dei suoi cinque:
+        <code>S = θ₁ + θ₂ + θ₃ + θ₄ + θ₅</code>. In punti: <code>punti = 1000 + 100·θ</code>.</p>
+      <h2>2. La probabilità di un risultato</h2>
+      <p>Con <code>d = (S<sub>mia</sub> − S<sub>loro</sub>) / 2</code>:</p>
+      <p><code>P(vinco) = eᵈ / (eᵈ + e⁻ᵈ + ν)</code><br>
+         <code>P(perdo) = e⁻ᵈ / (eᵈ + e⁻ᵈ + ν)</code><br>
+         <code>P(pari) = ν / (eᵈ + e⁻ᵈ + ν)</code></p>
+      <p>ν regola quanto sono frequenti i pareggi e lo stima il modello. A squadre pari si vince, si perde e si
+        pareggia con le percentuali scritte sotto la classifica.</p>
+      <h2>3. Come si trovano le forze</h2>
+      <p>Si cercano le forze che rendono <b>più probabili i risultati veri</b>, con una penalità per chi si
+        allontana dal suo voto di partenza: <code>Σ log P(esito) − Σ (θ − voto)² / (2σ²)</code>.
+        σ è la <b>fiducia</b>: con σ piccolo serve una valanga di partite per smentire un voto.</p>
+      <h2>4. ⭐ Perché conta con chi e contro chi giochi</h2>
+      <p>Nel punto di massimo vale, esattamente:</p>
+      <p class="formula"><code>forza = voto + σ² · Σ<sub>partite</sub> ½ · (risultato − atteso)</code></p>
+      <p><b>risultato</b> è +1 se la tua squadra vince, 0 se pareggia, −1 se perde. <b>atteso</b> è
+        P(vinco) − P(perdo) calcolato <b>con i compagni e gli avversari di quella partita</b>. Quindi:</p>
+      <ul>
+        <li>vincere con compagni fortissimi contro scarsi <b>quasi non sposta</b>: era atteso;</li>
+        <li>perdere con compagni scarsi contro forti <b>quasi non toglie</b>: era atteso anche quello;</li>
+        <li>vincere da sfavoriti <b>sposta molto</b>, perdere da favoriti <b>toglie molto</b>.</li>
+      </ul>
+      <p>E la forza dei compagni viene a sua volta dalle <b>loro</b> partite, anche quelle giocate senza di te:
+        se perdi sempre con Tizio, ma Tizio senza di te vince, la colpa va a te; se Tizio perde anche senza di te,
+        va a lui. Tutte le forze si aggiustano insieme finché i conti tornano per tutti. La scheda
+        <b>Giocatore</b> mostra questi addendi uno per uno: sommati al voto danno la forza.</p>
+      <h2>5. Il ±</h2>
+      <p>Quanto è sicura la stima: viene dalla curvatura della funzione nel massimo. Scende con le partite, e
+        scende più in fretta se giochi con compagni e contro avversari sempre diversi.</p>
+    </article>
+  </section>
+</main>
+
+<script src="bradley_terry.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
