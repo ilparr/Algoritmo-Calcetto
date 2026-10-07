@@ -2,8 +2,11 @@
 const DB_URL = "https://calcetti-1ebd7-default-rtdb.europe-west1.firebasedatabase.app/.json";
 const K_VOTI = "forzacalcetti.voti", K_FID = "forzacalcetti.fiducia";
 
-const st = { giocatori: {}, partite: [], voti: leggi(K_VOTI, {}), fiducia: leggi(K_FID, 10),
-             stima: null, scelti: new Set(), vista: "classifica", sel: null };
+const VOTO_MIN = 40, VOTO_MAX = 99;
+const st = { giocatori: {}, partite: [], voti: leggi(K_VOTI, null), fiducia: leggi(K_FID, 10),
+             stima: null, scelti: new Set(), vista: "classifica", sel: null, daSito: false };
+const salvatiQui = st.voti !== null;
+if (!salvatiQui) st.voti = {};
 
 function leggi(k, def) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch { return def; } }
 function scrivi(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
@@ -13,14 +16,31 @@ if (Object.values(st.voti).some(v => v > 200)) {
   scrivi(K_VOTI, st.voti);
 }
 if (st.fiducia > 40) { st.fiducia = Math.round(st.fiducia / 10); scrivi(K_FID, st.fiducia); }
-const VOTO_MIN = 40, VOTO_MAX = 99;
+st.bozza = { ...st.voti };
+st.fidBozza = st.fiducia;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const nome = id => st.giocatori[id]?.nome || id;
 const pct = x => Math.round(100 * x) + "%";
 const segno = (x, dec = 0) => { const v = Math.abs(x).toFixed(dec); return (Number(v) === 0 ? "" : x > 0 ? "+" : "−") + v; };
 
+// ⭐ I voti del SITO: un file voti.json pubblicato insieme alle pagine. Vale per chi non ha
+// ancora salvato voti suoi in questo browser (il telefono, un amico): cosi' tutti partono dagli
+// stessi voti. Chi salva i propri continua a usare i suoi.
+async function votiDelSito() {
+  if (salvatiQui) return;
+  try {
+    const r = await fetch("voti.json", { cache: "no-store" });
+    if (!r.ok) return;
+    const d = await r.json();
+    st.voti = pulisci(d.voti || d);
+    if (d.fiducia) st.fiducia = Number(d.fiducia);
+    st.bozza = { ...st.voti }; st.fidBozza = st.fiducia; st.daSito = true;
+  } catch {}
+}
+
 async function carica() {
+  await votiDelSito();
   $("#stato").textContent = "Carico le partite…";
   $("#stato").classList.remove("err");
   try {
@@ -42,17 +62,11 @@ async function carica() {
   }
 }
 
-// ⚠️ Mentre si scrive un voto (o si trascina la fiducia) le righe NON si riordinano: si
-// aggiornano i numeri al loro posto, e la classifica si riordina una volta sola a fine modifica
-// (Invio, uscita dal campo, rilascio del cursore). Altrimenti la riga scappa sotto le dita.
-let timer = null;
-function ricalcolaPresto(ordina = false) { clearTimeout(timer); timer = setTimeout(() => ricalcola(ordina), 200); }
-
-function ricalcola(ordina = true) {
-  clearTimeout(timer);
+function ricalcola() {
   const ids = Object.keys(st.giocatori);
   st.stima = stimaForza(st.partite, ids, { base: st.voti, fiducia: st.fiducia });
-  disegnaClassifica(ordina);
+  disegnaVoti();
+  disegnaClassifica();
   disegnaGiocatore();
   disegnaSquadre();
 }
@@ -68,58 +82,91 @@ function vps(id) {
   return `${v}-${p}-${s}`;
 }
 
-// ---------- CLASSIFICA ----------
+// ---------- VOTI INIZIALI ----------
+// ⭐ Si modifica una BOZZA; la classifica usa i voti solo dopo «Salva». Ordine alfabetico fisso:
+// le righe non si muovono mai mentre si scrive.
+const pulisci = v => Object.fromEntries(Object.entries(v).filter(([, x]) => x >= VOTO_MIN && x <= VOTO_MAX));
+const uguali = () => JSON.stringify(pulisci(st.bozza)) === JSON.stringify(pulisci(st.voti)) && st.fidBozza === st.fiducia;
+
+function statoVoti(msg) {
+  const el = $("#stato-voti");
+  if (msg) { el.innerHTML = msg; return; }
+  const n = Object.keys(pulisci(st.voti)).length;
+  el.innerHTML = uguali()
+    ? `<span class="salvato">✓ Salvato</span> · ${n} giocatori con un voto${st.daSito ? " (voti del sito)" : ""}`
+    : `<span class="modificato">● Modifiche non salvate</span>`;
+  $("#salva").disabled = $("#annulla").disabled = uguali();
+}
+
+function spiegaFiducia() {
+  const k = OVR_SCALA / 2 * (st.fidBozza / OVR_SCALA) ** 2;
+  $("#fiducia-spiega").textContent = `ogni partita sposta un giocatore al massimo di ±${(2 * k).toFixed(1)} punti`;
+}
+
+function disegnaVoti() {
+  const tb = $("#tab-voti tbody");
+  const ordinati = Object.keys(st.giocatori).sort((a, b) => nome(a).localeCompare(nome(b)));
+  const ovr = Object.fromEntries((st.stima?.giocatori || []).map(g => [g.id, g]));
+  const pres = id => st.partite.filter(m => m.chiari.includes(id) || m.scuri.includes(id)).length;
+  tb.innerHTML = ordinati.map(id => `<tr>
+      <td class="nome" style="cursor:default">${esc(nome(id))}</td>
+      <td><input type="number" step="1" min="${VOTO_MIN}" max="${VOTO_MAX}" placeholder="75" data-id="${esc(id)}"
+        value="${st.bozza[id] ?? ""}" class="${(st.bozza[id] ?? "") !== (st.voti[id] ?? "") ? "cambiato" : ""}"></td>
+      <td class="forza">${ovr[id] ? Math.round(ovr[id].punti) : "—"}</td>
+      <td class="muted hide-s">${pres(id)}</td></tr>`).join("");
+  tb.querySelectorAll("input").forEach(inp => {
+    inp.oninput = () => {
+      const v = inp.value.trim(), n = Number(v), id = inp.dataset.id;
+      if (v === "") delete st.bozza[id];
+      else if (n >= VOTO_MIN && n <= VOTO_MAX) st.bozza[id] = n;
+      // un numero a meta' («9» mentre si scrive 95) resta nel campo ma non nella bozza
+      inp.classList.toggle("cambiato", (st.bozza[id] ?? "") !== (st.voti[id] ?? ""));
+      statoVoti();
+    };
+    inp.onblur = () => {
+      const n = Number(inp.value);
+      if (inp.value.trim() !== "" && !(n >= VOTO_MIN && n <= VOTO_MAX)) {
+        inp.value = st.bozza[inp.dataset.id] ?? "";
+        statoVoti(`<span class="giu">Il voto va da ${VOTO_MIN} a ${VOTO_MAX}</span>`);
+        setTimeout(statoVoti, 2500);
+      }
+    };
+    inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); salva(); } };
+  });
+  $("#fiducia").value = st.fidBozza;
+  $("#fiducia-val").textContent = "±" + st.fidBozza;
+  spiegaFiducia();
+  statoVoti();
+}
+
+function salva() {
+  st.voti = pulisci(st.bozza);
+  st.fiducia = st.fidBozza;
+  st.bozza = { ...st.voti };
+  st.daSito = false;
+  scrivi(K_VOTI, st.voti);
+  scrivi(K_FID, st.fiducia);
+  ricalcola();
+}
+
+// ---------- CLASSIFICA (sola lettura) ----------
 const classeDelta = d => d > 0.5 ? "su" : d < -0.5 ? "giu" : "muted";
 
-function disegnaClassifica(ordina = true) {
+function disegnaClassifica() {
   const tb = $("#tab-classifica tbody");
-  if (!ordina && tb.rows.length) {           // solo i numeri, le righe restano dove sono
-    for (const g of st.stima.giocatori) {
-      const tr = tb.querySelector(`tr[data-riga="${CSS.escape(g.id)}"]`);
-      if (!tr) continue;
-      const delta = g.punti - g.partenza;
-      tr.querySelector(".c-ovr").textContent = Math.round(g.punti);
-      tr.querySelector(".c-sd").textContent = "±" + Math.round(g.sd);
-      const cd = tr.querySelector(".c-delta");
-      cd.textContent = segno(delta); cd.className = "c-delta " + classeDelta(delta);
-    }
-    return;
-  }
-  const attivo = document.activeElement?.dataset?.id;   // non perdere il campo mentre si scrive
   tb.innerHTML = st.stima.giocatori.map((g, i) => {
     const delta = g.punti - g.partenza;
-    return `<tr data-riga="${esc(g.id)}">
+    return `<tr>
       <td class="muted">${i + 1}</td>
       <td class="nome" data-apri="${esc(g.id)}">${esc(nome(g.id))}</td>
-      <td><input type="number" step="1" min="40" max="99" placeholder="75" data-id="${esc(g.id)}" value="${st.voti[g.id] ?? ""}"></td>
-      <td class="forza c-ovr">${Math.round(g.punti)}</td>
-      <td class="muted c-sd">±${Math.round(g.sd)}</td>
-      <td class="c-delta ${classeDelta(delta)}">${segno(delta)}</td>
+      <td class="muted">${st.voti[g.id] ?? 75}</td>
+      <td class="forza">${Math.round(g.punti)}</td>
+      <td class="muted">±${Math.round(g.sd)}</td>
+      <td class="${classeDelta(delta)}">${segno(delta, 1)}</td>
       <td class="muted hide-s">${g.presenze}</td>
       <td class="muted hide-s">${vps(g.id)}</td></tr>`;
   }).join("");
-  tb.querySelectorAll("input").forEach(inp => {
-    inp.oninput = () => {
-      const v = inp.value.trim(), n = Number(v);
-      inp.dataset.cambiato = "1";
-      // un numero a meta' («9» mentre si scrive 95) non e' un voto: si aspetta il resto
-      if (v === "") delete st.voti[inp.dataset.id];
-      else if (n >= VOTO_MIN && n <= VOTO_MAX) st.voti[inp.dataset.id] = n;
-      else return;
-      scrivi(K_VOTI, st.voti);
-      ricalcolaPresto(false);
-    };
-    // fine modifica: si riordina. Non su «change», che le freccette lanciano a ogni clic.
-    const chiudi = () => {
-      const n = Number(inp.value);
-      if (inp.value.trim() !== "" && !(n >= VOTO_MIN && n <= VOTO_MAX)) inp.value = st.voti[inp.dataset.id] ?? "";
-      if (inp.dataset.cambiato) { delete inp.dataset.cambiato; setTimeout(() => ricalcola(true), 0); }
-    };   // dopo: cosi' il campo successivo ha gia' il focus e lo si ritrova
-    inp.onblur = chiudi;
-    inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } };
-  });
   tb.querySelectorAll("[data-apri]").forEach(td => td.onclick = () => { st.sel = td.dataset.apri; mostra("giocatore"); disegnaGiocatore(); });
-  if (attivo) { const el = tb.querySelector(`input[data-id="${CSS.escape(attivo)}"]`); if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch {} } }
   const nu = st.stima.nu, pv = 1 / (2 + nu);
   $("#nota-pareggio").textContent = `A squadre pari il modello si aspetta: vittoria ${pct(pv)}, pareggio ${pct(st.stima.pareggio)}, sconfitta ${pct(pv)}.`;
 }
@@ -191,32 +238,31 @@ function mostra(v) {
 }
 document.querySelectorAll("#tabs button").forEach(b => b.onclick = () => mostra(b.dataset.v));
 
-$("#fiducia").value = st.fiducia;
-$("#fiducia-val").textContent = "±" + st.fiducia;
 $("#fiducia").oninput = e => {
-  st.fiducia = Number(e.target.value);
-  $("#fiducia-val").textContent = "±" + st.fiducia;
-  scrivi(K_FID, st.fiducia);
-  ricalcolaPresto(false);
+  st.fidBozza = Number(e.target.value);
+  $("#fiducia-val").textContent = "±" + st.fidBozza;
+  spiegaFiducia();
+  statoVoti();
 };
-$("#fiducia").onchange = () => ricalcola(true);      // al rilascio del cursore
+$("#salva").onclick = salva;
+$("#annulla").onclick = () => { st.bozza = { ...st.voti }; st.fidBozza = st.fiducia; disegnaVoti(); };
 $("#esporta").onclick = () => {
-  const blob = new Blob([JSON.stringify({ voti: st.voti, fiducia: st.fiducia }, null, 2)], { type: "application/json" });
-  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "voti-calcetti.json" });
+  const blob = new Blob([JSON.stringify({ voti: pulisci(st.voti), fiducia: st.fiducia }, null, 2)], { type: "application/json" });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "voti.json" });
   a.click(); URL.revokeObjectURL(a.href);
 };
-$("#importa").onchange = async e => {
+$("#importa").onchange = async e => {          // nella BOZZA: si guarda e poi si salva
   const f = e.target.files[0]; if (!f) return;
   try {
     const d = JSON.parse(await f.text());
-    st.voti = d.voti || d; if (d.fiducia) st.fiducia = Number(d.fiducia);
-    scrivi(K_VOTI, st.voti); scrivi(K_FID, st.fiducia);
-    $("#fiducia").value = st.fiducia; $("#fiducia-val").textContent = "±" + st.fiducia;
-    ricalcola();
+    st.bozza = { ...(d.voti || d) };
+    if (d.fiducia) st.fidBozza = Number(d.fiducia);
+    disegnaVoti();
   } catch { alert("File non valido"); }
   e.target.value = "";
 };
-$("#azzera").onclick = () => { if (confirm("Cancellare tutti i voti?")) { st.voti = {}; scrivi(K_VOTI, st.voti); ricalcola(); } };
+$("#azzera").onclick = () => { st.bozza = {}; disegnaVoti(); };
+window.addEventListener("beforeunload", e => { if (!uguali()) { e.preventDefault(); e.returnValue = ""; } });
 $("#pulisci").onclick = () => { st.scelti.clear(); disegnaSquadre(); };
 
 carica();

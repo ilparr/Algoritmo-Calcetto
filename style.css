@@ -20,7 +20,7 @@ main { max-width: 980px; margin: 0 auto; padding: 16px; }
 .barra { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 8px 0; }
 .azioni { display: flex; gap: 6px; flex-wrap: wrap; }
 button, .btn { background: var(--accento); color: #0b1a11; border: 0; border-radius: 8px; padding: 7px 12px; font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
-button.sec { background: var(--card2); color: var(--testo); border: 1px solid var(--bordo); }
+button.sec, .btn.sec { background: var(--card2); color: var(--testo); border: 1px solid var(--bordo); }
 .fid { display: flex; align-items: center; gap: 8px; color: var(--muted); }
 .fid b { color: var(--testo); min-width: 44px; }
 .fid input { accent-color: var(--accento); width: 160px; }
@@ -67,3 +67,8 @@ select { background: var(--card2); color: var(--testo); border: 1px solid var(--
   .tab input { width: 62px; }
   .divisione .squadre { grid-template-columns: 1fr; }
 }
+
+.tab input.cambiato { border-color: var(--giallo); }
+.modificato { color: var(--giallo); }
+.salvato { color: var(--verde); }
+button:disabled { opacity: .4; cursor: default; }

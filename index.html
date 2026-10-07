@@ -14,6 +14,7 @@
 <header class="top">
   <div class="brand">Forza <span>Calcetti</span></div>
   <nav class="tabs" id="tabs">
+    <button data-v="voti">Voti iniziali</button>
     <button data-v="classifica" class="on">Classifica</button>
     <button data-v="giocatore">Giocatore</button>
     <button data-v="squadre">Squadre</button>
@@ -24,22 +25,45 @@
 <main>
   <div id="stato" class="stato">Carico le partite…</div>
 
-  <!-- CLASSIFICA -->
-  <section id="v-classifica" class="vista on">
+  <!-- VOTI INIZIALI -->
+  <section id="v-voti" class="vista">
+    <p class="nota">L'<b>overall di partenza</b> di ogni giocatore, come su FIFA: <b>75 = medio</b>, 10 punti =
+      differenza netta. Chi resta vuoto parte da 75. Le modifiche valgono solo dopo <b>Salva</b>.</p>
     <div class="barra">
       <label class="fid">Fiducia nei voti
         <input type="range" id="fiducia" min="3" max="30" step="1" value="10">
         <b id="fiducia-val">±10</b>
       </label>
+      <span class="nota" id="fiducia-spiega"></span>
+    </div>
+    <div class="barra">
+      <span id="stato-voti" class="nota"></span>
       <div class="azioni">
-        <button id="esporta">Esporta voti</button>
-        <label class="btn">Importa voti<input type="file" id="importa" accept="application/json" hidden></label>
-        <button id="azzera" class="sec">Azzera voti</button>
+        <button id="salva">Salva</button>
+        <button id="annulla" class="sec">Annulla modifiche</button>
       </div>
     </div>
-    <p class="nota">Scrivi l'<b>overall</b> di partenza di ogni giocatore, come su FIFA: <b>75 = medio</b>, 10 punti = differenza netta
-      (un 85 al posto di un 75 porta la sua squadra da ~31% a ~41% di vittoria). Chi resta vuoto parte da 75. L'<b>overall</b> è il voto corretto dalle partite; <b>Δ</b> è quanto le partite
-      ti hanno smentito. Tocca un nome per vedere da dove viene.</p>
+    <div class="tab-wrap">
+      <table class="tab" id="tab-voti">
+        <thead><tr><th class="sx">Giocatore</th><th>Voto iniziale</th><th>Overall oggi</th><th class="hide-s">Presenze</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="barra" style="margin-top:12px">
+      <span class="nota">I voti stanno in questo browser. Per portarli altrove, o per farli diventare
+        quelli del sito per tutti, esportali.</span>
+      <div class="azioni">
+        <button id="esporta" class="sec">Esporta</button>
+        <label class="btn sec">Importa<input type="file" id="importa" accept="application/json" hidden></label>
+        <button id="azzera" class="sec">Azzera tutti</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLASSIFICA -->
+  <section id="v-classifica" class="vista on">
+    <p class="nota">L'<b>overall</b> è il voto iniziale corretto dalle partite; <b>Δ</b> è quanto le partite ti
+      hanno smentito. I voti si cambiano nella scheda <b>Voti iniziali</b>. Tocca un nome per vedere da dove viene.</p>
     <div class="tab-wrap">
       <table class="tab" id="tab-classifica">
         <thead><tr><th>#</th><th class="sx">Giocatore</th><th>Voto</th><th>Overall</th><th>±</th><th>Δ</th><th class="hide-s">Pres.</th><th class="hide-s">V-P-S</th></tr></thead>
