@@ -13,6 +13,7 @@ if (Object.values(st.voti).some(v => v > 200)) {
   scrivi(K_VOTI, st.voti);
 }
 if (st.fiducia > 40) { st.fiducia = Math.round(st.fiducia / 10); scrivi(K_FID, st.fiducia); }
+const VOTO_MIN = 40, VOTO_MAX = 99;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const nome = id => st.giocatori[id]?.nome || id;
@@ -41,13 +42,17 @@ async function carica() {
   }
 }
 
+// ⚠️ Mentre si scrive un voto (o si trascina la fiducia) le righe NON si riordinano: si
+// aggiornano i numeri al loro posto, e la classifica si riordina una volta sola a fine modifica
+// (Invio, uscita dal campo, rilascio del cursore). Altrimenti la riga scappa sotto le dita.
 let timer = null;
-function ricalcolaPresto() { clearTimeout(timer); timer = setTimeout(ricalcola, 250); }
+function ricalcolaPresto(ordina = false) { clearTimeout(timer); timer = setTimeout(() => ricalcola(ordina), 200); }
 
-function ricalcola() {
+function ricalcola(ordina = true) {
+  clearTimeout(timer);
   const ids = Object.keys(st.giocatori);
   st.stima = stimaForza(st.partite, ids, { base: st.voti, fiducia: st.fiducia });
-  disegnaClassifica();
+  disegnaClassifica(ordina);
   disegnaGiocatore();
   disegnaSquadre();
 }
@@ -64,28 +69,54 @@ function vps(id) {
 }
 
 // ---------- CLASSIFICA ----------
-function disegnaClassifica() {
+const classeDelta = d => d > 0.5 ? "su" : d < -0.5 ? "giu" : "muted";
+
+function disegnaClassifica(ordina = true) {
   const tb = $("#tab-classifica tbody");
+  if (!ordina && tb.rows.length) {           // solo i numeri, le righe restano dove sono
+    for (const g of st.stima.giocatori) {
+      const tr = tb.querySelector(`tr[data-riga="${CSS.escape(g.id)}"]`);
+      if (!tr) continue;
+      const delta = g.punti - g.partenza;
+      tr.querySelector(".c-ovr").textContent = Math.round(g.punti);
+      tr.querySelector(".c-sd").textContent = "±" + Math.round(g.sd);
+      const cd = tr.querySelector(".c-delta");
+      cd.textContent = segno(delta); cd.className = "c-delta " + classeDelta(delta);
+    }
+    return;
+  }
   const attivo = document.activeElement?.dataset?.id;   // non perdere il campo mentre si scrive
   tb.innerHTML = st.stima.giocatori.map((g, i) => {
     const delta = g.punti - g.partenza;
-    return `<tr>
+    return `<tr data-riga="${esc(g.id)}">
       <td class="muted">${i + 1}</td>
       <td class="nome" data-apri="${esc(g.id)}">${esc(nome(g.id))}</td>
-      <td><input type="number" step="1" min="1" max="99" placeholder="75" data-id="${esc(g.id)}" value="${st.voti[g.id] ?? ""}"></td>
-      <td class="forza">${Math.round(g.punti)}</td>
-      <td class="muted">±${Math.round(g.sd)}</td>
-      <td class="${delta > 0.5 ? "su" : delta < -0.5 ? "giu" : "muted"}">${segno(delta)}</td>
+      <td><input type="number" step="1" min="40" max="99" placeholder="75" data-id="${esc(g.id)}" value="${st.voti[g.id] ?? ""}"></td>
+      <td class="forza c-ovr">${Math.round(g.punti)}</td>
+      <td class="muted c-sd">±${Math.round(g.sd)}</td>
+      <td class="c-delta ${classeDelta(delta)}">${segno(delta)}</td>
       <td class="muted hide-s">${g.presenze}</td>
       <td class="muted hide-s">${vps(g.id)}</td></tr>`;
   }).join("");
   tb.querySelectorAll("input").forEach(inp => {
     inp.oninput = () => {
-      const v = inp.value.trim();
-      if (v === "" || isNaN(Number(v))) delete st.voti[inp.dataset.id]; else st.voti[inp.dataset.id] = Number(v);
+      const v = inp.value.trim(), n = Number(v);
+      inp.dataset.cambiato = "1";
+      // un numero a meta' («9» mentre si scrive 95) non e' un voto: si aspetta il resto
+      if (v === "") delete st.voti[inp.dataset.id];
+      else if (n >= VOTO_MIN && n <= VOTO_MAX) st.voti[inp.dataset.id] = n;
+      else return;
       scrivi(K_VOTI, st.voti);
-      ricalcolaPresto();
+      ricalcolaPresto(false);
     };
+    // fine modifica: si riordina. Non su «change», che le freccette lanciano a ogni clic.
+    const chiudi = () => {
+      const n = Number(inp.value);
+      if (inp.value.trim() !== "" && !(n >= VOTO_MIN && n <= VOTO_MAX)) inp.value = st.voti[inp.dataset.id] ?? "";
+      if (inp.dataset.cambiato) { delete inp.dataset.cambiato; setTimeout(() => ricalcola(true), 0); }
+    };   // dopo: cosi' il campo successivo ha gia' il focus e lo si ritrova
+    inp.onblur = chiudi;
+    inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } };
   });
   tb.querySelectorAll("[data-apri]").forEach(td => td.onclick = () => { st.sel = td.dataset.apri; mostra("giocatore"); disegnaGiocatore(); });
   if (attivo) { const el = tb.querySelector(`input[data-id="${CSS.escape(attivo)}"]`); if (el) { el.focus(); const n = el.value.length; try { el.setSelectionRange(n, n); } catch {} } }
@@ -166,8 +197,9 @@ $("#fiducia").oninput = e => {
   st.fiducia = Number(e.target.value);
   $("#fiducia-val").textContent = "±" + st.fiducia;
   scrivi(K_FID, st.fiducia);
-  ricalcolaPresto();
+  ricalcolaPresto(false);
 };
+$("#fiducia").onchange = () => ricalcola(true);      // al rilascio del cursore
 $("#esporta").onclick = () => {
   const blob = new Blob([JSON.stringify({ voti: st.voti, fiducia: st.fiducia }, null, 2)], { type: "application/json" });
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "voti-calcetti.json" });
