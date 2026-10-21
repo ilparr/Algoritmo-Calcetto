@@ -16,6 +16,7 @@
   <nav class="tabs" id="tabs">
     <button data-v="voti">Voti iniziali</button>
     <button data-v="classifica" class="on">Classifica</button>
+    <button data-v="pari">Tutti pari</button>
     <button data-v="giocatore">Giocatore</button>
     <button data-v="squadre">Squadre</button>
     <button data-v="formula">Come funziona</button>
@@ -71,6 +72,19 @@
       </table>
     </div>
     <p class="nota" id="nota-pareggio"></p>
+  </section>
+
+  <!-- TUTTI PARI -->
+  <section id="v-pari" class="vista">
+    <p class="nota">La classifica dei <b>soli risultati</b>: tutti partono da <b>75</b>, con fiducia <b>±10</b>,
+      qualunque voto ci sia nella scheda <b>Voti iniziali</b>. <b>Con i voti</b> è la posizione nella
+      classifica normale, per confronto.</p>
+    <div class="tab-wrap">
+      <table class="tab" id="tab-pari">
+        <thead><tr><th>#</th><th class="sx">Giocatore</th><th>Overall</th><th>±</th><th>Con i voti</th><th class="hide-s">Pres.</th><th class="hide-s">V-P-S</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
 
   <!-- GIOCATORE -->

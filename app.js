@@ -65,8 +65,10 @@ async function carica() {
 function ricalcola() {
   const ids = Object.keys(st.giocatori);
   st.stima = stimaForza(st.partite, ids, { base: st.voti, fiducia: st.fiducia });
+  st.stimaPari = stimaForza(st.partite, ids, { base: {}, fiducia: FIDUCIA_PARI });
   disegnaVoti();
   disegnaClassifica();
+  disegnaPari();
   disegnaGiocatore();
   disegnaSquadre();
 }
@@ -169,6 +171,22 @@ function disegnaClassifica() {
   tb.querySelectorAll("[data-apri]").forEach(td => td.onclick = () => { st.sel = td.dataset.apri; mostra("giocatore"); disegnaGiocatore(); });
   const nu = st.stima.nu, pv = 1 / (2 + nu);
   $("#nota-pareggio").textContent = `A squadre pari il modello si aspetta: vittoria ${pct(pv)}, pareggio ${pct(st.stima.pareggio)}, sconfitta ${pct(pv)}.`;
+}
+
+// ---------- TUTTI PARI (sola lettura) ----------
+// Stesso modello, ma tutti da 75 e fiducia fissa: conta solo cosa dicono le partite.
+const FIDUCIA_PARI = 10;
+
+function disegnaPari() {
+  const pos = Object.fromEntries(st.stima.giocatori.map((g, i) => [g.id, i + 1]));
+  $("#tab-pari tbody").innerHTML = st.stimaPari.giocatori.map((g, i) => `<tr>
+      <td class="muted">${i + 1}</td>
+      <td class="nome" style="cursor:default">${esc(nome(g.id))}</td>
+      <td class="forza">${g.punti.toFixed(1)}</td>
+      <td class="muted">±${Math.round(g.sd)}</td>
+      <td class="muted">${pos[g.id]}°</td>
+      <td class="muted hide-s">${g.presenze}</td>
+      <td class="muted hide-s">${vps(g.id)}</td></tr>`).join("");
 }
 
 // ---------- GIOCATORE ----------
