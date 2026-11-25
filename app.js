@@ -3,10 +3,13 @@ const DB_URL = "https://calcetti-1ebd7-default-rtdb.europe-west1.firebasedatabas
 const K_VOTI = "forzacalcetti.voti", K_FID = "forzacalcetti.fiducia";
 
 const VOTO_MIN = 40, VOTO_MAX = 99;
-const K_TS = "forzacalcetti.votsito", K_CORR = "forzacalcetti.correzioni";
+const K_TS = "forzacalcetti.votsito", K_CORR = "forzacalcetti.correzioni", K_SBLOCCO = "forzacalcetti.sbloccato";
+// solo il gestore modifica il registro: la pagina è statica e non sa da dove ti colleghi,
+// quindi la porta è un codice (qui c'è solo l'hash SHA-256, mai il codice in chiaro)
+const CODICE_SHA = "bd03e78c4045001b2d850c170e65398b0e47b951bf726e5ba5819f421d32d6ec";
 const st = { giocatori: {}, partite: [], partiteBase: [], partiteSito: [], partiteTutte: [], baseById: {}, sitoById: {},
              voti: leggi(K_VOTI, null), fiducia: leggi(K_FID, 10),
-             corrSito: {}, corr: leggi(K_CORR, {}), corrBozza: {},
+             corrSito: {}, corr: leggi(K_CORR, {}), corrBozza: {}, sbloccato: leggi(K_SBLOCCO, false),
              stima: null, scelti: new Set(), vista: "classifica", sel: null, daSito: false };
 const salvatiQui = st.voti !== null;
 if (!salvatiQui) st.voti = {};
@@ -270,7 +273,14 @@ function disegnaPartite() {
     st.corrBozza[id] = { ...(st.corrBozza[id] || {}), [side]: [...new Set(ids)] };
     statoCorr();
   });
-  statoCorr();
+  const ro = !st.sbloccato;
+  tb.querySelectorAll("input, select").forEach(el => { el.disabled = ro; });
+  $("#corr-salva").disabled = ro;
+  $("#corr-ripristina").disabled = ro;
+  $("#corr-esporta").disabled = ro || !Object.keys({ ...st.corrSito, ...st.corr }).length;
+  $("#corr-sblocca").textContent = st.sbloccato ? "Blocca modifica" : "Sblocca modifica";
+  if (ro) statoCorr(`<span class="nota">Solo il gestore può modificare: «Sblocca modifica» chiede il codice. Per ora leggi.</span>`);
+  else statoCorr();
 }
 
 function salvaCorr() {
@@ -420,6 +430,24 @@ $("#corr-esporta").onclick = () => {
     partite: { ...st.corrSito, ...st.corr } }, null, 2)], { type: "application/json" });
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "correzioni.json" });
   a.click(); URL.revokeObjectURL(a.href);
+};
+async function sha256hex(s) {
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+$("#corr-sblocca").onclick = async () => {
+  if (st.sbloccato) { st.sbloccato = false; scrivi(K_SBLOCCO, false); st.corrBozza = {}; disegnaPartite(); return; }
+  if (!window.isSecureContext || !crypto.subtle) { statoCorr(`<span class="giu">Serve https per verificare il codice.</span>`); return; }
+  const p = prompt("Codice del gestore:");
+  if (p === null) return;
+  if (await sha256hex(p) !== CODICE_SHA) {
+    statoCorr(`<span class="giu">Codice sbagliato.</span>`);
+    setTimeout(statoCorr, 2500);
+    return;
+  }
+  st.sbloccato = true;
+  scrivi(K_SBLOCCO, true);
+  disegnaPartite();
 };
 
 carica();

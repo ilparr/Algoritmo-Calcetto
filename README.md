@@ -12,9 +12,11 @@ visto, i suoi voti sostituiscono quelli salvati nel browser (il sito è il regis
 Per cambiarli: Esporta dalla scheda (l'export mette già l'`aggiornato`) e sostituire `voti.json`.
 
 Le partite arrivano dall'app del gruppo. Una partita segnata male si corregge nella scheda
-«Partite» (rose e risultato; «—» = nondecisa, che non entra nel modello): le correzioni sono
-salvate nel browser, e `correzioni.json` è quelle del sito, visibili a tutti (le proprie prevalgono).
-Per pubblicarle: «Esporta correzioni.json» e sostituire il file nella cartella.
+«Partite» (rose e risultato; «—» = nondecisa, che non entra nel modello). La scheda è **sola
+lettura per tutti**: «Sblocca modifica» chiede il codice del gestore (`soloio`, l'hash sta in
+`CODICE_SHA` in `app.js`; per cambiarlo: `node -e "console.log(require('crypto').createHash('sha256').update('codicenuovo').digest('hex'))"`).
+Le correzioni sono salvate nel browser, e `correzioni.json` è quelle del sito, visibili a tutti
+(le proprie prevalgono). Per pubblicarle: «Esporta correzioni.json» e sostituire il file nella cartella.
 
 Pubblicazione: basta `git push` su GitHub — il repo è collegato a Vercel e il push deploya in
 produzione da solo (`npx vercel` serve solo se l'integrazione fosse giù).
