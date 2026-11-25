@@ -16,4 +16,5 @@ Le partite arrivano dall'app del gruppo. Una partita segnata male si corregge ne
 salvate nel browser, e `correzioni.json` è quelle del sito, visibili a tutti (le proprie prevalgono).
 Per pubblicarle: «Esporta correzioni.json» e sostituire il file nella cartella.
 
-Pubblicazione: `npx vercel` in questa cartella (sito statico, nessuna build).
+Pubblicazione: basta `git push` su GitHub — il repo è collegato a Vercel e il push deploya in
+produzione da solo (`npx vercel` serve solo se l'integrazione fosse giù).
