@@ -19,6 +19,7 @@
     <button data-v="pari">Tutti pari</button>
     <button data-v="giocatore">Giocatore</button>
     <button data-v="squadre">Squadre</button>
+    <button data-v="partite">Partite</button>
     <button data-v="formula">Come funziona</button>
   </nav>
 </header>
@@ -99,6 +100,27 @@
     <div id="scelta" class="scelta"></div>
     <div class="barra"><span id="conta">0 / 10</span><button id="pulisci" class="sec">Togli tutti</button></div>
     <div id="divisioni"></div>
+  </section>
+
+  <!-- PARTITE -->
+  <section id="v-partite" class="vista">
+    <p class="nota">Le partite arrivano dall'app del gruppo. Una partita <b>segnata male</b> si corregge qui:
+      rose e risultato. La correzione vale in questo browser appena <b>Salvi</b>; con <b>Esporta</b> ottieni
+      <code>correzioni.json</code>, da mettere nella cartella del sito perch&eacute; la vedano tutti.</p>
+    <div class="barra">
+      <span id="stato-corr" class="nota"></span>
+      <div class="azioni">
+        <button id="corr-salva">Salva correzioni</button>
+        <button id="corr-ripristina" class="sec">Annulla modifiche</button>
+        <button id="corr-esporta" class="sec">Esporta correzioni.json</button>
+      </div>
+    </div>
+    <div class="tab-wrap">
+      <table class="tab" id="tab-partite">
+        <thead><tr><th>Data</th><th class="sx">Chiari</th><th>Risultato</th><th class="sx">Scuri</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
 
   <!-- FORMULA -->

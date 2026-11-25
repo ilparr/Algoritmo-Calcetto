@@ -7,7 +7,13 @@ di base dati a mano. Le partite si leggono in sola lettura dal database dell'app
 - `bradley_terry.js` — il modello (stima, probabilità, spiegazione per partita, squadre)
 
 I voti si danno nella scheda «Voti iniziali» e valgono dopo «Salva»; restano nel browser di chi li
-scrive. `voti.json` sono i voti DEL SITO: li usa chi non ne ha salvati di suoi (telefono, amici).
-Per cambiarli: Esporta dalla scheda e sostituire `voti.json` con il file scaricato.
+scrive. `voti.json` sono i voti DEL SITO: quando il file ha un `aggiornato` più recente di quello già
+visto, i suoi voti sostituiscono quelli salvati nel browser (il sito è il registro condiviso).
+Per cambiarli: Esporta dalla scheda (l'export mette già l'`aggiornato`) e sostituire `voti.json`.
+
+Le partite arrivano dall'app del gruppo. Una partita segnata male si corregge nella scheda
+«Partite» (rose e risultato; «—» = nondecisa, che non entra nel modello): le correzioni sono
+salvate nel browser, e `correzioni.json` è quelle del sito, visibili a tutti (le proprie prevalgono).
+Per pubblicarle: «Esporta correzioni.json» e sostituire il file nella cartella.
 
 Pubblicazione: `npx vercel` in questa cartella (sito statico, nessuna build).

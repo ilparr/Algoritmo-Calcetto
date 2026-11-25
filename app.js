@@ -3,7 +3,10 @@ const DB_URL = "https://calcetti-1ebd7-default-rtdb.europe-west1.firebasedatabas
 const K_VOTI = "forzacalcetti.voti", K_FID = "forzacalcetti.fiducia";
 
 const VOTO_MIN = 40, VOTO_MAX = 99;
-const st = { giocatori: {}, partite: [], voti: leggi(K_VOTI, null), fiducia: leggi(K_FID, 10),
+const K_TS = "forzacalcetti.votsito", K_CORR = "forzacalcetti.correzioni";
+const st = { giocatori: {}, partite: [], partiteBase: [], partiteSito: [], partiteTutte: [], baseById: {}, sitoById: {},
+             voti: leggi(K_VOTI, null), fiducia: leggi(K_FID, 10),
+             corrSito: {}, corr: leggi(K_CORR, {}), corrBozza: {},
              stima: null, scelti: new Set(), vista: "classifica", sel: null, daSito: false };
 const salvatiQui = st.voti !== null;
 if (!salvatiQui) st.voti = {};
@@ -24,23 +27,60 @@ const nome = id => st.giocatori[id]?.nome || id;
 const pct = x => Math.round(100 * x) + "%";
 const segno = (x, dec = 0) => { const v = Math.abs(x).toFixed(dec); return (Number(v) === 0 ? "" : x > 0 ? "+" : "−") + v; };
 
-// ⭐ I voti del SITO: un file voti.json pubblicato insieme alle pagine. Vale per chi non ha
-// ancora salvato voti suoi in questo browser (il telefono, un amico): cosi' tutti partono dagli
-// stessi voti. Chi salva i propri continua a usare i suoi.
+// ⭐ I voti del SITO: un file voti.json pubblicato insieme alle pagine. Il campo `aggiornato`
+// dice quale versione è: se il sito ne ha una nuova, la nuova vince su tutto (anche sui voti
+// salvati in questo browser), perche' e' il registro condiviso del gruppo.
 async function votiDelSito() {
-  if (salvatiQui) return;
   try {
     const r = await fetch("voti.json", { cache: "no-store" });
     if (!r.ok) return;
     const d = await r.json();
+    const ts = d.aggiornato || "";
+    const visto = leggi(K_TS, null);
+    if (ts ? ts === visto : salvatiQui) return;
     st.voti = pulisci(d.voti || d);
     if (d.fiducia) st.fiducia = Number(d.fiducia);
     st.bozza = { ...st.voti }; st.fidBozza = st.fiducia; st.daSito = true;
+    scrivi(K_TS, ts);
   } catch {}
 }
 
+// ⭐ Le CORREZIONI alle partite: il registro vero sta nell'app del gruppo (sola lettura qui);
+// una partita segnata male si corregge nella scheda «Partite». Le correzioni del sito
+// (correzioni.json) valgono per tutti, le proprie salvate in questo browser prevalgono.
+async function correzioniDelSito() {
+  try {
+    const r = await fetch("correzioni.json", { cache: "no-store" });
+    if (!r.ok) return;
+    st.corrSito = (await r.json()).partite || {};
+  } catch {}
+}
+
+// un esito che non è -1/0/1 (es. "sospesa") non è un risultato: resta «non deciso»
+const normEsito = x => { const n = Number(x); return x !== null && x !== "" && (n === -1 || n === 0 || n === 1) ? n : null; };
+
+function applicaCorrezioni(lista, corr) {
+  lista.forEach(m => {
+    const c = corr[m.id];
+    if (!c) return;
+    m.correzione = true;
+    if (Array.isArray(c.chiari) && c.chiari.length) m.chiari = [...c.chiari];
+    if (Array.isArray(c.scuri) && c.scuri.length) m.scuri = [...c.scuri];
+    if ("esito" in c) m.esito = normEsito(c.esito);
+  });
+}
+
+function costruisciPartite() {
+  const clone = () => st.partiteBase.map(m => ({ ...m, esito: normEsito(m.esito), chiari: [...m.chiari], scuri: [...m.scuri] }));
+  st.partiteSito = clone(); applicaCorrezioni(st.partiteSito, st.corrSito);
+  st.partiteTutte = clone(); applicaCorrezioni(st.partiteTutte, { ...st.corrSito, ...st.corr });
+  st.partite = st.partiteTutte.filter(m => m.esito !== null);   // il modello vede solo le partite finite
+  st.baseById = Object.fromEntries(st.partiteBase.map(m => [m.id, m]));
+  st.sitoById = Object.fromEntries(st.partiteSito.map(m => [m.id, m]));
+}
+
 async function carica() {
-  await votiDelSito();
+  await Promise.all([votiDelSito(), correzioniDelSito()]);
   $("#stato").textContent = "Carico le partite…";
   $("#stato").classList.remove("err");
   try {
@@ -48,18 +88,24 @@ async function carica() {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json() || {};
     st.giocatori = d.giocatori || {};
-    st.partite = Object.entries(d.partite || {}).map(([id, m]) => ({ id, ...m }))
+    st.partiteBase = Object.entries(d.partite || {}).map(([id, m]) => ({ id, ...m }))
       .filter(m => Array.isArray(m.chiari) && Array.isArray(m.scuri))
       .sort((a, b) => (a.id < b.id ? -1 : 1));
-    const ultima = st.partite.length ? st.partite[st.partite.length - 1].data : "—";
-    $("#stato").innerHTML = `${st.partite.length} partite, ${Object.keys(st.giocatori).length} giocatori · ultima ${esc(ultima)} ·
-      <a href="#" id="ricarica" style="color:inherit">ricarica</a>`;
+    costruisciPartite();
+    aggiornaStato();
     $("#ricarica").onclick = e => { e.preventDefault(); carica(); };
     ricalcola();
   } catch (e) {
     $("#stato").textContent = "Non riesco a leggere le partite (" + e.message + ").";
     $("#stato").classList.add("err");
   }
+}
+
+function aggiornaStato() {
+  const ultima = st.partite.length ? st.partite[st.partite.length - 1].data : "—";
+  $("#stato").innerHTML = `${st.partite.length} partite, ${Object.keys(st.giocatori).length} giocatori · ultima ${esc(ultima)} ·
+    <a href="#" id="ricarica" style="color:inherit">ricarica</a>`;
+  $("#ricarica").onclick = e => { e.preventDefault(); carica(); };
 }
 
 function ricalcola() {
@@ -69,6 +115,7 @@ function ricalcola() {
   disegnaVoti();
   disegnaClassifica();
   disegnaPari();
+  disegnaPartite();
   disegnaGiocatore();
   disegnaSquadre();
 }
@@ -148,6 +195,90 @@ function salva() {
   st.daSito = false;
   scrivi(K_VOTI, st.voti);
   scrivi(K_FID, st.fiducia);
+  ricalcola();
+}
+
+// ---------- PARTITE (correzioni al registro) ----------
+// Il registro vero sta nell'app del gruppo; qui si corregge una partita segnata male.
+// La bozza vale dopo «Salva correzioni»; «Esporta correzioni.json» produce il file da
+// pubblicare sul sito per farlo vedere a tutti.
+function diffCorr(c, m) {
+  if (!m) return {};
+  const o = {};
+  const cn = "esito" in c ? normEsito(c.esito) : m.esito, mn = normEsito(m.esito);
+  if (cn !== mn) o.esito = cn;
+  if (Array.isArray(c.chiari) && c.chiari.join(",") !== m.chiari.join(",")) o.chiari = c.chiari;
+  if (Array.isArray(c.scuri) && c.scuri.join(",") !== m.scuri.join(",")) o.scuri = c.scuri;
+  return o;
+}
+const canon = o => JSON.stringify(Object.fromEntries(Object.keys(o).sort().map(k => [k, o[k]])));
+function bozzaPulita() {          // che st.corr risulterebbe se salvassi adesso
+  const out = {};
+  st.partiteTutte.forEach(m => {  // m = com'è ora (sito + correzioni tue)
+    const d = st.corrBozza[m.id] || {};
+    const o = diffCorr({ esito: "esito" in d ? d.esito : m.esito,
+                         chiari: d.chiari || m.chiari,
+                         scuri: d.scuri || m.scuri }, st.sitoById[m.id]);
+    if (Object.keys(o).length) out[m.id] = o;
+  });
+  return out;
+};
+
+function statoCorr(msg) {
+  const el = $("#stato-corr");
+  if (msg) { el.innerHTML = msg; return; }
+  const n = Object.keys(st.corr).length;
+  const sporco = canon(bozzaPulita()) !== canon(st.corr);
+  el.innerHTML = sporco
+    ? `<span class="modificato">● Modifiche non salvate</span>`
+    : `<span class="salvato">✓ Salvato</span> · ${n} partite corrette da te` +
+      (Object.keys(st.corrSito).length ? `, ${Object.keys(st.corrSito).length} dal sito` : "");
+  $("#corr-salva").disabled = !sporco;
+}
+
+function disegnaPartite() {
+  const tb = $("#tab-partite tbody");
+  if (!st.partiteTutte.length) { tb.innerHTML = ""; return; }
+  tb.innerHTML = st.partiteTutte.map(m => {
+    const e = { ...(st.corrSito[m.id] || {}), ...(st.corr[m.id] || {}), ...(st.corrBozza[m.id] || {}) };
+    const ch = e.chiari || m.chiari, sc = e.scuri || m.scuri;
+    const es = "esito" in e ? normEsito(e.esito) : m.esito;
+    const opt = (v, l) => `<option value="${v === null ? "" : v}" ${es === v ? "selected" : ""}>${l}</option>`;
+    return `<tr class="${m.correzione ? "corretta" : ""}">
+      <td class="muted">${esc(m.data || "")}${m.correzione ? ' <span class="badge p">corretta</span>' : ""}</td>
+      <td class="sx"><input class="sq" type="text" data-id="${esc(m.id)}" data-side="chiari" value="${esc(ch.map(nome).join(", "))}"></td>
+      <td><select data-id="${esc(m.id)}">${opt(1, "Chiari")}${opt(0, "Pareggio")}${opt(-1, "Scuri")}${opt(null, "—")}</select></td>
+      <td class="sx"><input class="sq" type="text" data-id="${esc(m.id)}" data-side="scuri" value="${esc(sc.map(nome).join(", "))}"></td></tr>`;
+  }).join("");
+  tb.querySelectorAll("select").forEach(s => s.onchange = () => {
+    const id = s.dataset.id;
+    st.corrBozza[id] = { ...(st.corrBozza[id] || {}), esito: s.value === "" ? null : Number(s.value) };
+    statoCorr();
+  });
+  const daNome = {};
+  Object.keys(st.giocatori).forEach(id => { daNome[id.toLowerCase()] = id; daNome[nome(id).toLowerCase().trim()] = id; });
+  tb.querySelectorAll("input.sq").forEach(inp => inp.onchange = () => {
+    const id = inp.dataset.id, side = inp.dataset.side;
+    const parti = inp.value.split(",").map(x => x.trim().toLowerCase()).filter(Boolean);
+    const ids = parti.map(p => daNome[p]);
+    if (!parti.length || ids.some(x => x === undefined)) {
+      inp.classList.add("giu");
+      statoCorr(`Nomi non riconosciuti: usa i nomi dei giocatori, separati da virgola.`);
+      return;
+    }
+    inp.classList.remove("giu");
+    st.corrBozza[id] = { ...(st.corrBozza[id] || {}), [side]: [...new Set(ids)] };
+    statoCorr();
+  });
+  statoCorr();
+}
+
+function salvaCorr() {
+  st.corr = bozzaPulita();
+  st.corrBozza = {};
+  scrivi(K_CORR, st.corr);
+  costruisciPartite();
+  aggiornaStato();
   ricalcola();
 }
 
@@ -265,7 +396,7 @@ $("#fiducia").oninput = e => {
 $("#salva").onclick = salva;
 $("#annulla").onclick = () => { st.bozza = { ...st.voti }; st.fidBozza = st.fiducia; disegnaVoti(); };
 $("#esporta").onclick = () => {
-  const blob = new Blob([JSON.stringify({ voti: pulisci(st.voti), fiducia: st.fiducia }, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify({ voti: pulisci(st.voti), fiducia: st.fiducia, aggiornato: new Date().toISOString() }, null, 2)], { type: "application/json" });
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "voti.json" });
   a.click(); URL.revokeObjectURL(a.href);
 };
@@ -282,5 +413,13 @@ $("#importa").onchange = async e => {          // nella BOZZA: si guarda e poi s
 $("#azzera").onclick = () => { st.bozza = {}; disegnaVoti(); };
 window.addEventListener("beforeunload", e => { if (!uguali()) { e.preventDefault(); e.returnValue = ""; } });
 $("#pulisci").onclick = () => { st.scelti.clear(); disegnaSquadre(); };
+$("#corr-salva").onclick = salvaCorr;
+$("#corr-ripristina").onclick = () => { st.corrBozza = {}; disegnaPartite(); };
+$("#corr-esporta").onclick = () => {
+  const blob = new Blob([JSON.stringify({ aggiornato: new Date().toISOString(),
+    partite: { ...st.corrSito, ...st.corr } }, null, 2)], { type: "application/json" });
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "correzioni.json" });
+  a.click(); URL.revokeObjectURL(a.href);
+};
 
 carica();

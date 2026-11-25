@@ -72,3 +72,9 @@ select { background: var(--card2); color: var(--testo); border: 1px solid var(--
 .modificato { color: var(--giallo); }
 .salvato { color: var(--verde); }
 button:disabled { opacity: .4; cursor: default; }
+
+/* Partite: rose e risultato correggibili */
+.tab input.sq { width: 260px; text-align: left; }
+.tab select { padding: 4px 6px; }
+tr.corretta td { background: var(--card2); }
+@media (max-width: 700px) { .tab input.sq { width: 130px; font-size: 12px; } }
